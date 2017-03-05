@@ -22,7 +22,7 @@
 
 #include <vector>
 #include "p8-platform/util/StdString.h"
-#include "client.h"
+#include <kodi/addon-instance/PVRClient.h>
 
 struct PVRDemoEpgEntry
 {
@@ -94,38 +94,53 @@ struct PVRDemoChannelGroup
   std::vector<int> members;
 };
 
-class PVRDemoData
+class PVRDemoData : public kodi::addon::CInstancePVRClient
 {
 public:
-  PVRDemoData(void);
+  PVRDemoData(KODI_HANDLE kodiInstance);
   virtual ~PVRDemoData(void);
 
-  virtual int GetChannelsAmount(void);
-  virtual PVR_ERROR GetChannels(ADDON_HANDLE handle, bool bRadio);
-  virtual bool GetChannel(const PVR_CHANNEL &channel, PVRDemoChannel &myChannel);
+  virtual std::string GetBackendName(void) override { return "pulse-eight demo pvr add-on"; }
+  virtual std::string GetBackendVersion(void) override { return "0.1"; }
+  virtual std::string GetConnectionString(void) override { return "connected"; }
+  virtual std::string GetBackendHostname(void) override { return ""; }
 
-  virtual int GetChannelGroupsAmount(void);
-  virtual PVR_ERROR GetChannelGroups(ADDON_HANDLE handle, bool bRadio);
-  virtual PVR_ERROR GetChannelGroupMembers(ADDON_HANDLE handle, const PVR_CHANNEL_GROUP &group);
+  virtual PVR_ERROR GetDriveSpace(long long& iTotal, long long& iUsed) override;
 
-  virtual PVR_ERROR GetEPGForChannel(ADDON_HANDLE handle, const PVR_CHANNEL &channel, time_t iStart, time_t iEnd);
+  virtual void GetCapabilities(PVR_ADDON_CAPABILITIES& pCapabilities) override;
 
-  virtual int GetRecordingsAmount(bool bDeleted);
-  virtual PVR_ERROR GetRecordings(ADDON_HANDLE handle, bool bDeleted);
+  virtual int GetChannelsAmount(void) override;
+  virtual PVR_ERROR GetChannels(bool bRadio, std::vector<PVR_CHANNEL>& channels) override;
 
-  virtual int GetTimersAmount(void);
-  virtual PVR_ERROR GetTimers(ADDON_HANDLE handle);
+  virtual int GetChannelGroupsAmount(void) override;
+  virtual PVR_ERROR GetChannelGroups(bool bRadio, std::vector<PVR_CHANNEL_GROUP>& groups) override;
+  virtual PVR_ERROR GetChannelGroupMembers(const PVR_CHANNEL_GROUP& group, std::vector<PVR_CHANNEL_GROUP_MEMBER>& members) override;
 
-  virtual std::string GetSettingsFile() const;
-protected:
-  virtual bool LoadDemoData(void);
+  virtual PVR_ERROR GetEPG(const PVR_CHANNEL& channel, time_t iStart, time_t iEnd, std::vector<EPG_TAG>& epg) override;
+
+  virtual int GetRecordingsAmount(bool bDeleted) override;
+  virtual PVR_ERROR GetRecordings(bool bDeleted, std::vector<PVR_RECORDING>& kodiRecordings) override;
+
+  virtual int GetTimersAmount(void) override;
+  virtual PVR_ERROR GetTimers(std::vector<PVR_TIMER>& timers) override;
+
+  virtual bool OpenLiveStream(const PVR_CHANNEL &channel) override;
+  virtual void CloseLiveStream(void) override;
+  virtual bool SwitchChannel(const PVR_CHANNEL &channel) override;
+  virtual PVR_ERROR SignalStatus(PVR_SIGNAL_STATUS &signalStatus) override;
+
 private:
+  bool LoadDemoData(void);
+  bool GetChannel(const PVR_CHANNEL &channel, PVRDemoChannel &myChannel);
+
+  bool                             m_bIsPlaying;
+  PVRDemoChannel                   m_currentChannel;
   std::vector<PVRDemoChannelGroup> m_groups;
   std::vector<PVRDemoChannel>      m_channels;
   std::vector<PVRDemoRecording>    m_recordings;
   std::vector<PVRDemoRecording>    m_recordingsDeleted;
   std::vector<PVRDemoTimer>        m_timers;
   time_t                           m_iEpgStart;
-  CStdString                       m_strDefaultIcon;
-  CStdString                       m_strDefaultMovie;
+  std::string                      m_strDefaultIcon;
+  std::string                      m_strDefaultMovie;
 };

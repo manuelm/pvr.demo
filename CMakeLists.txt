@@ -17,7 +17,7 @@ include_directories(${kodiplatform_INCLUDE_DIRS}
 set(DEPLIBS ${kodiplatform_LIBRARIES}
             ${p8-platform_LIBRARIES})
 
-set(PVRDEMO_SOURCES src/client.cpp
+set(PVRDEMO_SOURCES src/addon.cpp
                     src/PVRDemoData.cpp)
 
 build_addon(pvr.demo PVRDEMO DEPLIBS)

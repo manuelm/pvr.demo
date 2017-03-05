@@ -19,18 +19,18 @@
  *
  */
 
-#include "util/XMLUtils.h"
+#include <kodi/util/XMLUtils.h>
 #include "PVRDemoData.h"
 
 using namespace std;
-using namespace ADDON;
 
-PVRDemoData::PVRDemoData(void)
+PVRDemoData::PVRDemoData(KODI_HANDLE kodiInstance)
+  : CInstancePVRClient(kodiInstance),
+    m_bIsPlaying(false),
+    m_iEpgStart(-1),
+    m_strDefaultIcon("http://www.royalty-free.tv/news/wp-content/uploads/2011/06/cc-logo1.jpg"),
+    m_strDefaultMovie("")
 {
-  m_iEpgStart = -1;
-  m_strDefaultIcon =  "http://www.royalty-free.tv/news/wp-content/uploads/2011/06/cc-logo1.jpg";
-  m_strDefaultMovie = "";
-
   LoadDemoData();
 }
 
@@ -40,32 +40,39 @@ PVRDemoData::~PVRDemoData(void)
   m_groups.clear();
 }
 
-std::string PVRDemoData::GetSettingsFile() const
+void PVRDemoData::GetCapabilities(PVR_ADDON_CAPABILITIES& capabilities)
 {
-  string settingFile = g_strClientPath;
-  if (settingFile.at(settingFile.size() - 1) == '\\' ||
-      settingFile.at(settingFile.size() - 1) == '/')
-    settingFile.append("PVRDemoAddonSettings.xml");
-  else
-    settingFile.append("/PVRDemoAddonSettings.xml");
-  return settingFile;
+  capabilities.bSupportsEPG = true;
+  capabilities.bSupportsTV = true;
+  capabilities.bSupportsRadio = true;
+  capabilities.bSupportsChannelGroups = true;
+  capabilities.bSupportsRecordings = true;
+  capabilities.bSupportsRecordingsUndelete = true;
+  capabilities.bSupportsTimers = true;
+}
+
+PVR_ERROR PVRDemoData::GetDriveSpace(long long& iTotal, long long& iUsed)
+{
+  iTotal = 1024 * 1024 * 1024;
+  iUsed  = 0;
+  return PVR_ERROR_NO_ERROR;
 }
 
 bool PVRDemoData::LoadDemoData(void)
 {
   TiXmlDocument xmlDoc;
-  string strSettingsFile = GetSettingsFile();
+  string strSettingsFile = kodi::GetAddonPath() + "/PVRDemoAddonSettings.xml";
 
   if (!xmlDoc.LoadFile(strSettingsFile))
   {
-    XBMC->Log(LOG_ERROR, "invalid demo data (no/invalid data file found at '%s')", strSettingsFile.c_str());
+    kodi::Log(ADDON_LOG_ERROR, "invalid demo data (no/invalid data file found at '%s')", strSettingsFile.c_str());
     return false;
   }
 
   TiXmlElement *pRootElement = xmlDoc.RootElement();
   if (strcmp(pRootElement->Value(), "demo") != 0)
   {
-    XBMC->Log(LOG_ERROR, "invalid demo data (no <demo> tag found)");
+    kodi::Log(ADDON_LOG_ERROR, "invalid demo data (no <demo> tag found)");
     return false;
   }
 
@@ -208,7 +215,7 @@ bool PVRDemoData::LoadDemoData(void)
       /* genre subtype */
       XMLUtils::GetInt(pEpgNode, "genresubtype", entry.iGenreSubType);
 
-      XBMC->Log(LOG_DEBUG, "loaded EPG entry '%s' channel '%d' start '%d' end '%d'", entry.strTitle.c_str(), entry.iChannelId, entry.startTime, entry.endTime);
+      kodi::Log(ADDON_LOG_DEBUG, "loaded EPG entry '%s' channel '%d' start '%d' end '%d'", entry.strTitle.c_str(), entry.iChannelId, entry.startTime, entry.endTime);
       channel.epg.push_back(entry);
     }
   }
@@ -421,7 +428,7 @@ bool PVRDemoData::LoadDemoData(void)
         }
       }
 
-      XBMC->Log(LOG_DEBUG, "loaded timer '%s' channel '%d' start '%d' end '%d'", timer.strTitle.c_str(), timer.iChannelId, timer.startTime, timer.endTime);
+      kodi::Log(ADDON_LOG_DEBUG, "loaded timer '%s' channel '%d' start '%d' end '%d'", timer.strTitle.c_str(), timer.iChannelId, timer.startTime, timer.endTime);
       m_timers.push_back(timer);
     }
   }
@@ -434,7 +441,7 @@ int PVRDemoData::GetChannelsAmount(void)
   return m_channels.size();
 }
 
-PVR_ERROR PVRDemoData::GetChannels(ADDON_HANDLE handle, bool bRadio)
+PVR_ERROR PVRDemoData::GetChannels(bool bRadio, std::vector<PVR_CHANNEL>& channels)
 {
   for (unsigned int iChannelPtr = 0; iChannelPtr < m_channels.size(); iChannelPtr++)
   {
@@ -454,7 +461,7 @@ PVR_ERROR PVRDemoData::GetChannels(ADDON_HANDLE handle, bool bRadio)
       strncpy(xbmcChannel.strIconPath, channel.strIconPath.c_str(), sizeof(xbmcChannel.strIconPath) - 1);
       xbmcChannel.bIsHidden         = false;
 
-      PVR->TransferChannelEntry(handle, &xbmcChannel);
+      channels.push_back(xbmcChannel);
     }
   }
 
@@ -489,7 +496,7 @@ int PVRDemoData::GetChannelGroupsAmount(void)
   return m_groups.size();
 }
 
-PVR_ERROR PVRDemoData::GetChannelGroups(ADDON_HANDLE handle, bool bRadio)
+PVR_ERROR PVRDemoData::GetChannelGroups(bool bRadio, std::vector<PVR_CHANNEL_GROUP>& groups)
 {
   for (unsigned int iGroupPtr = 0; iGroupPtr < m_groups.size(); iGroupPtr++)
   {
@@ -503,14 +510,14 @@ PVR_ERROR PVRDemoData::GetChannelGroups(ADDON_HANDLE handle, bool bRadio)
       xbmcGroup.iPosition = group.iPosition;
       strncpy(xbmcGroup.strGroupName, group.strGroupName.c_str(), sizeof(xbmcGroup.strGroupName) - 1);
 
-      PVR->TransferChannelGroup(handle, &xbmcGroup);
+      groups.push_back(xbmcGroup);
     }
   }
 
   return PVR_ERROR_NO_ERROR;
 }
 
-PVR_ERROR PVRDemoData::GetChannelGroupMembers(ADDON_HANDLE handle, const PVR_CHANNEL_GROUP &group)
+PVR_ERROR PVRDemoData::GetChannelGroupMembers(const PVR_CHANNEL_GROUP& group, std::vector<PVR_CHANNEL_GROUP_MEMBER>& members)
 {
   for (unsigned int iGroupPtr = 0; iGroupPtr < m_groups.size(); iGroupPtr++)
   {
@@ -530,7 +537,7 @@ PVR_ERROR PVRDemoData::GetChannelGroupMembers(ADDON_HANDLE handle, const PVR_CHA
         xbmcGroupMember.iChannelUniqueId  = channel.iUniqueId;
         xbmcGroupMember.iChannelNumber    = channel.iChannelNumber;
 
-        PVR->TransferChannelGroupMember(handle, &xbmcGroupMember);
+        members.push_back(xbmcGroupMember);;
       }
     }
   }
@@ -538,7 +545,7 @@ PVR_ERROR PVRDemoData::GetChannelGroupMembers(ADDON_HANDLE handle, const PVR_CHA
   return PVR_ERROR_NO_ERROR;
 }
 
-PVR_ERROR PVRDemoData::GetEPGForChannel(ADDON_HANDLE handle, const PVR_CHANNEL &channel, time_t iStart, time_t iEnd)
+PVR_ERROR PVRDemoData::GetEPG(const PVR_CHANNEL& channel, time_t iStart, time_t iEnd, std::vector<EPG_TAG>& epg)
 {
   if (m_iEpgStart == -1)
     m_iEpgStart = iStart;
@@ -576,7 +583,7 @@ PVR_ERROR PVRDemoData::GetEPGForChannel(ADDON_HANDLE handle, const PVR_CHANNEL &
         
         iLastEndTimeTmp = tag.endTime;
 
-        PVR->TransferEpgEntry(handle, &tag);
+        epg.push_back(tag);
       }
 
       iLastEndTime = iLastEndTimeTmp;
@@ -592,7 +599,7 @@ int PVRDemoData::GetRecordingsAmount(bool bDeleted)
   return bDeleted ? m_recordingsDeleted.size() : m_recordings.size();
 }
 
-PVR_ERROR PVRDemoData::GetRecordings(ADDON_HANDLE handle, bool bDeleted)
+PVR_ERROR PVRDemoData::GetRecordings(bool bDeleted, std::vector<PVR_RECORDING>& kodiRecordings)
 {
   std::vector<PVRDemoRecording> *recordings = bDeleted ? &m_recordingsDeleted : &m_recordings;
 
@@ -620,7 +627,7 @@ PVR_ERROR PVRDemoData::GetRecordings(ADDON_HANDLE handle, bool bDeleted)
     /* TODO: PVR API 5.0.0: Implement this */
     xbmcRecording.iChannelUid = PVR_CHANNEL_INVALID_UID;
 
-    PVR->TransferRecordingEntry(handle, &xbmcRecording);
+    kodiRecordings.push_back(xbmcRecording);
   }
 
   return PVR_ERROR_NO_ERROR;
@@ -631,7 +638,7 @@ int PVRDemoData::GetTimersAmount(void)
   return m_timers.size();
 }
 
-PVR_ERROR PVRDemoData::GetTimers(ADDON_HANDLE handle)
+PVR_ERROR PVRDemoData::GetTimers(std::vector<PVR_TIMER>& kodiTimers)
 {
   unsigned int i = PVR_TIMER_NO_CLIENT_INDEX + 1;
   for (std::vector<PVRDemoTimer>::iterator it = m_timers.begin() ; it != m_timers.end() ; it++)
@@ -653,8 +660,41 @@ PVR_ERROR PVRDemoData::GetTimers(ADDON_HANDLE handle)
     strncpy(xbmcTimer.strTitle, timer.strTitle.c_str(), sizeof(timer.strTitle) - 1);
     strncpy(xbmcTimer.strSummary, timer.strSummary.c_str(), sizeof(timer.strSummary) - 1);
 
-    PVR->TransferTimerEntry(handle, &xbmcTimer);
+    kodiTimers.push_back(xbmcTimer);
   }
+
+  return PVR_ERROR_NO_ERROR;
+}
+
+bool PVRDemoData::OpenLiveStream(const PVR_CHANNEL &channel)
+{
+  CloseLiveStream();
+
+  if (GetChannel(channel, m_currentChannel))
+  {
+    m_bIsPlaying = true;
+    return true;
+  }
+
+  return false;
+}
+
+void PVRDemoData::CloseLiveStream(void)
+{
+  m_bIsPlaying = false;
+}
+
+bool PVRDemoData::SwitchChannel(const PVR_CHANNEL &channel)
+{
+  CloseLiveStream();
+
+  return OpenLiveStream(channel);
+}
+
+PVR_ERROR PVRDemoData::SignalStatus(PVR_SIGNAL_STATUS &signalStatus)
+{
+  snprintf(signalStatus.strAdapterName, sizeof(signalStatus.strAdapterName), "pvr demo adapter 1");
+  snprintf(signalStatus.strAdapterStatus, sizeof(signalStatus.strAdapterStatus), "OK");
 
   return PVR_ERROR_NO_ERROR;
 }

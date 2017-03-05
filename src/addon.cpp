@@ -1,4 +1,3 @@
-#pragma once
 /*
  *      Copyright (C) 2011 Pulse-Eight
  *      http://www.pulse-eight.com/
@@ -20,11 +19,21 @@
  *
  */
 
-#include "libXBMC_addon.h"
-#include "libXBMC_pvr.h"
+#include "PVRDemoData.h"
 
-extern bool                          m_bCreated;
-extern std::string                   g_strUserPath;
-extern std::string                   g_strClientPath;
-extern ADDON::CHelper_libXBMC_addon *XBMC;
-extern CHelper_libXBMC_pvr          *PVR;
+class CMyAddon : public kodi::addon::CAddonBase
+{
+public:
+  CMyAddon() { }
+  virtual ADDON_STATUS CreateInstance(int instanceType, std::string instanceID, KODI_HANDLE instance, KODI_HANDLE& addonInstance) override
+  {
+    if (instanceType == ADDON_INSTANCE_PVR)
+      addonInstance = new PVRDemoData(instance);
+    else
+      return ADDON_STATUS_NOT_IMPLEMENTED;
+
+    return ADDON_STATUS_OK;
+  }
+};
+
+ADDONCREATOR(CMyAddon);
