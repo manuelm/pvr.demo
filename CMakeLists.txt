@@ -18,9 +18,12 @@ set(DEPLIBS ${kodiplatform_LIBRARIES}
             ${p8-platform_LIBRARIES})
 
 set(PVRDEMO_SOURCES src/client.cpp
+                    src/StreamReader.cpp
                     src/PVRDemoData.cpp)
 
 set(PVRDEMO_HEADERS src/client.h
+                    src/IStreamReader.h
+                    src/StreamReader.h
                     src/PVRDemoData.h)
 
 build_addon(pvr.demo PVRDEMO DEPLIBS)

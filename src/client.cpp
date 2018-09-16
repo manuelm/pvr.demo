@@ -22,6 +22,7 @@
 #include "client.h"
 #include "xbmc_pvr_dll.h"
 #include "PVRDemoData.h"
+#include "StreamReader.h"
 #include <p8-platform/util/util.h>
 
 using namespace std;
@@ -45,6 +46,8 @@ std::string g_strClientPath           = "";
 
 CHelper_libXBMC_addon *XBMC           = NULL;
 CHelper_libXBMC_pvr   *PVR            = NULL;
+
+StreamReader *strReader = nullptr;
 
 extern "C" {
 
@@ -155,6 +158,8 @@ PVR_ERROR GetAddonCapabilities(PVR_ADDON_CAPABILITIES* pCapabilities)
   pCapabilities->bSupportsRecordingsRename = false;
   pCapabilities->bSupportsRecordingsLifetimeChange = false;
   pCapabilities->bSupportsDescrambleInfo = false;
+  pCapabilities->bHandlesInputStream      = true;
+  pCapabilities->bHandlesDemuxing         = false;
 
   return PVR_ERROR_NO_ERROR;
 }
@@ -235,6 +240,7 @@ PVR_ERROR GetChannels(ADDON_HANDLE handle, bool bRadio)
 
 PVR_ERROR GetChannelStreamProperties(const PVR_CHANNEL* channel, PVR_NAMED_VALUE* properties, unsigned int* iPropertiesCount)
 {
+#if 0
   if (!channel || !properties || !iPropertiesCount)
     return PVR_ERROR_SERVER_ERROR;
 
@@ -255,6 +261,8 @@ PVR_ERROR GetChannelStreamProperties(const PVR_CHANNEL* channel, PVR_NAMED_VALUE
   }
 
   return PVR_ERROR_SERVER_ERROR;
+#endif
+  return PVR_ERROR_NOT_IMPLEMENTED;
 }
 
 int GetChannelGroupsAmount(void)
@@ -374,6 +382,62 @@ PVR_ERROR CallMenuHook(const PVR_MENUHOOK& menuhook, const PVR_MENUHOOK_DATA&)
   return PVR_ERROR_NO_ERROR;
 }
 
+bool OpenLiveStream(const PVR_CHANNEL&)
+{
+  const std::string streamURL = "https://manuel.mausz.at/kodi_dvbstream.ts";
+  strReader = new StreamReader(streamURL);
+  return strReader->Start();
+}
+
+void CloseLiveStream(void)
+{
+  SAFE_DELETE(strReader);
+}
+
+int ReadLiveStream(unsigned char *pBuffer, unsigned int iBufferSize)
+{
+  return (strReader) ? strReader->ReadData(pBuffer, iBufferSize) : 0;
+}
+
+long long SeekLiveStream(long long iPosition, int iWhence /* = SEEK_SET */)
+{
+  return (strReader) ? strReader->Seek(iPosition, iWhence) : -1;
+}
+
+long long LengthLiveStream(void)
+{
+  return (strReader) ? strReader->Length() : -1;
+}
+
+bool IsTimeshifting(void)
+{
+  return (strReader && strReader->IsTimeshifting());
+}
+
+PVR_ERROR GetStreamTimes(PVR_STREAM_TIMES *times)
+{
+  if (!times)
+    return PVR_ERROR_INVALID_PARAMETERS;
+  if (strReader)
+  {
+    times->startTime = strReader->TimeStart();
+    times->ptsStart  = 0;
+    times->ptsBegin  = 0;
+    times->ptsEnd    = (!strReader->IsTimeshifting()) ? 0
+      : (strReader->TimeEnd() - strReader->TimeStart()) * DVD_TIME_BASE;
+    return PVR_ERROR_NO_ERROR;
+  }
+  return PVR_ERROR_NOT_IMPLEMENTED;
+}
+
+PVR_ERROR GetStreamReadChunkSize(int* chunksize)
+{
+  if (!chunksize)
+    return PVR_ERROR_INVALID_PARAMETERS;
+  *chunksize = 64 * 1024;
+  return PVR_ERROR_NO_ERROR;
+}
+
 /** UNUSED API FUNCTIONS */
 PVR_ERROR OpenDialogChannelScan(void) { return PVR_ERROR_NOT_IMPLEMENTED; }
 PVR_ERROR DeleteChannel(const PVR_CHANNEL &channel) { return PVR_ERROR_NOT_IMPLEMENTED; }
@@ -387,11 +451,6 @@ long long SeekRecordedStream(long long iPosition, int iWhence /* = SEEK_SET */) 
 long long LengthRecordedStream(void) { return 0; }
 void DemuxReset(void) {}
 void DemuxFlush(void) {}
-bool OpenLiveStream(const PVR_CHANNEL&) { return false; }
-void CloseLiveStream(void) {}
-int ReadLiveStream(unsigned char *pBuffer, unsigned int iBufferSize) { return 0; }
-long long SeekLiveStream(long long iPosition, int iWhence /* = SEEK_SET */) { return -1; }
-long long LengthLiveStream(void) { return -1; }
 PVR_ERROR DeleteRecording(const PVR_RECORDING &recording) { return PVR_ERROR_NOT_IMPLEMENTED; }
 PVR_ERROR RenameRecording(const PVR_RECORDING &recording) { return PVR_ERROR_NOT_IMPLEMENTED; }
 PVR_ERROR SetRecordingPlayCount(const PVR_RECORDING &recording, int count) { return PVR_ERROR_NOT_IMPLEMENTED; }
@@ -408,7 +467,6 @@ bool CanPauseStream(void) { return false; }
 bool CanSeekStream(void) { return false; }
 bool SeekTime(double,bool,double*) { return false; }
 void SetSpeed(int) {};
-bool IsTimeshifting(void) { return false; }
 bool IsRealTimeStream(void) { return true; }
 PVR_ERROR UndeleteRecording(const PVR_RECORDING& recording) { return PVR_ERROR_NOT_IMPLEMENTED; }
 PVR_ERROR DeleteAllRecordingsFromTrash() { return PVR_ERROR_NOT_IMPLEMENTED; }
@@ -416,9 +474,7 @@ PVR_ERROR SetEPGTimeFrame(int) { return PVR_ERROR_NOT_IMPLEMENTED; }
 PVR_ERROR GetDescrambleInfo(PVR_DESCRAMBLE_INFO*) { return PVR_ERROR_NOT_IMPLEMENTED; }
 PVR_ERROR SetRecordingLifetime(const PVR_RECORDING*) { return PVR_ERROR_NOT_IMPLEMENTED; }
 PVR_ERROR GetStreamProperties(PVR_STREAM_PROPERTIES*) { return PVR_ERROR_NOT_IMPLEMENTED; }
-PVR_ERROR GetStreamTimes(PVR_STREAM_TIMES*) { return PVR_ERROR_NOT_IMPLEMENTED; }
 PVR_ERROR IsEPGTagRecordable(const EPG_TAG*, bool*) { return PVR_ERROR_NOT_IMPLEMENTED; }
 PVR_ERROR GetEPGTagEdl(const EPG_TAG* epgTag, PVR_EDL_ENTRY edl[], int *size) { return PVR_ERROR_NOT_IMPLEMENTED; }
-PVR_ERROR GetStreamReadChunkSize(int* chunksize) { return PVR_ERROR_NOT_IMPLEMENTED; }
   
 } // extern "C"
